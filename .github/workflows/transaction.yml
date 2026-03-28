@@ -1,0 +1,44 @@
+name: Transaction Pipeline
+
+on:
+  repository_dispatch:
+    types: [ fraud-check ]
+
+jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [11, 17]
+
+    steps:
+      - run: echo "Testing Java ${{ matrix.java }}"
+
+  deploy-staging:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - run: |
+          echo "Deploying to staging"
+          exit 1   # simulate failure
+
+  rollback:
+    needs: deploy-staging
+    if: failure()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Rollback Fraud
+        run: |
+          ssh ubuntu@YOUR_AGENT_IP "kubectl rollout undo deployment/fraud-app"
+
+      - name: Notify
+        run: |
+          curl -X POST https://api.github.com/repos/YOUR_USERNAME/fraud-detection/issues \
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -d '{
+            "title": "Rollback Triggered",
+            "body": "Transaction failed → Fraud rolled back"
+          }'

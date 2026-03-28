@@ -1,44 +1,47 @@
-name: Transaction Pipeline
+name: Transaction Service CI/CD
 
 on:
   repository_dispatch:
-    types: [ fraud-check ]
+    types: [fraud-check]
 
 jobs:
-
-  test:
+  test-and-deploy:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         java: [11, 17]
 
     steps:
-      - run: echo "Testing Java ${{ matrix.java }}"
+      - uses: actions/checkout@v3
 
-  deploy-staging:
-    needs: test
-    runs-on: ubuntu-latest
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: ${{ matrix.java }}
 
-    steps:
-      - run: |
-          echo "Deploying to staging"
-          exit 1   # simulate failure
-
-  rollback:
-    needs: deploy-staging
-    if: failure()
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Rollback Fraud
+      - name: Mock Build & Test
         run: |
-          ssh ubuntu@YOUR_AGENT_IP "kubectl rollout undo deployment/fraud-app"
+          echo "Running Transaction Service tests on Java ${{ matrix.java }} (mock)"
+          sleep 2
 
-      - name: Notify
+      - name: Deploy to Staging (mock)
         run: |
-          curl -X POST https://api.github.com/repos/YOUR_USERNAME/fraud-detection/issues \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -d '{
-            "title": "Rollback Triggered",
-            "body": "Transaction failed → Fraud rolled back"
-          }'
+          echo "Deploying Transaction Service to staging environment (mock)"
+          sleep 1
+        env:
+          ENV: staging
+
+      - name: Conditional Production Deployment
+        if: ${{ github.event.client_payload.status == 'success' }}
+        run: |
+          echo "Deploying to Production (mock)"
+          sleep 1
+        env:
+          ENV: production
+
+      - name: Rollback if Failure
+        if: failure()
+        run: |
+          echo "Transaction Service failed – triggering Fraud Detection rollback (mock)"
+          curl -X POST -H "Authorization: Bearer ${{ secrets.FRAUD_JENKINS_TOKEN }}" \
+          http://<JENKINS_MASTER>/job/FraudDetection/build?token=<token>
